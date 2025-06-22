@@ -1,5 +1,6 @@
 import socket
 import ssl
+import gzip
 
 DEFAULT_FILE_URL = "file:///home/lucas/Documents/bs/asd.html"
 MAX_REDIRECTIONS = 10
@@ -77,6 +78,7 @@ class URL:
         request += "Host: {}\r\n".format(self.host)
         request += "Connection: keep-alive\r\n"
         request += "User-Agent: browser-python\r\n"
+        request += "Accept-Encoding: gzip\r\n"
         request += "\r\n"
 
         s.send(request.encode("utf8"))
@@ -98,6 +100,8 @@ class URL:
             header, value = line.split(":", 1)
             response_headers[header.casefold()] = value.strip()
 
+        # Status line and response headers are never compressed, so we can read them directly
+
         if status.startswith("3"):
             # Handle redirects
             if self.redirections_count >= MAX_REDIRECTIONS:
@@ -117,11 +121,32 @@ class URL:
             else:
                 raise ValueError("Redirect without location header")
 
-        assert "transfer-encoding" not in response_headers
-        assert "content-encoding" not in response_headers
+        # assert "transfer-encoding" not in response_headers
+        # assert "content-encoding" not in response_headers
 
-        content = response.read(int(response_headers.get("content-length", None)))
-        content = content.decode("utf8")
+        # Handle possible content-encoding and transfer-encoding
+
+        
+        if response_headers.get("transfer-encoding", "").lower() == "chunked":
+            # Handle chunked transfer encoding
+            content = b""
+            while True:
+                chunk_size_line = response.readline()
+                chunk_size_line = chunk_size_line.decode("utf8").strip()
+                if not chunk_size_line:
+                    break
+                chunk_size = int(chunk_size_line, 16)
+                if chunk_size == 0:
+                    break
+                chunk = response.read(chunk_size)
+                content += chunk
+                response.readline()
+        else:
+            content = response.read(int(response_headers.get("content-length", None)))
+            if response_headers.get("content-encoding", "").lower() == "gzip":
+                content = gzip.decompress(content)
+            content = content.decode("utf8")
+
         # s.close() # Not closing the socket because we are using keep-alive
 
         requests_cache[self.full_url] = content
