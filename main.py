@@ -10,7 +10,7 @@ class URL:
 
         self.source = False
 
-        # If scheme is source, we turn true the source flag and do other logic with the original scheme
+        # If scheme is source, turn true the source flag and do the normal logic with the original scheme
         if self.scheme == "source":
             self.scheme, url = url.split(":", 1)
             self.source = True
