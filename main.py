@@ -1,15 +1,23 @@
 import socket
 import ssl
 
+DEFAULT_FILE_URL = "file:///home/lucas/Documents/bs/asd.html"
+
 class URL:
     def __init__(self, url: str):
-        self.scheme, url = url.split("://", 1)
-        assert self.scheme in ["http", "https"]
+        self.scheme, url = url.split(":", 1)
+        assert self.scheme in ["http", "https", "file", "data"]
 
         if self.scheme == "http":
             self.port = 80
         elif self.scheme == "https":
             self.port = 443
+        elif self.scheme == "data":
+            self.data_url = url
+            return
+
+        if url.startswith("//"):
+            url = url[2:]
 
         if "/" not in url:
             url += "/"
@@ -21,7 +29,22 @@ class URL:
 
         self.path = "/" + url
 
+        # If the scheme is file, host will be empty and path will be the full file path
+
     def request(self):
+
+        if self.scheme == "file":
+            with open(self.path, "r", encoding="utf8") as f:
+                return f.read()
+        elif self.scheme == "data":
+            if self.data_url.startswith("text/html,"):
+                content = self.data_url[10:]
+            elif self.data_url.startswith("text/plain,"):
+                content = self.data_url[11:]
+            else:
+                raise ValueError("Unsupported data URL scheme")
+            return content + "\n"
+
         s = socket.socket(
             family=socket.AF_INET,
             type=socket.SOCK_STREAM,
@@ -35,6 +58,8 @@ class URL:
 
         request = "GET {} HTTP/1.0\r\n".format(self.path)
         request += "Host: {}\r\n".format(self.host)
+        request += "Connection: close\r\n"
+        request += "User-Agent: browser-python\r\n"
         request += "\r\n"
 
         s.send(request.encode("utf8"))
