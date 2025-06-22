@@ -2,9 +2,10 @@ import socket
 import ssl
 
 DEFAULT_FILE_URL = "file:///home/lucas/Documents/bs/asd.html"
+MAX_REDIRECTIONS = 10
 
 class URL:
-    def __init__(self, url: str):
+    def __init__(self, url: str, count: int = 0):
         self.scheme, url = url.split(":", 1)
         assert self.scheme in ["http", "https", "file", "data", "source"]
 
@@ -39,6 +40,8 @@ class URL:
 
         # If the scheme is file, host will be empty and path will be the full file path
 
+        self.redirections_count = count
+
     def request(self):
 
         if self.scheme == "file":
@@ -66,31 +69,57 @@ class URL:
 
         request = "GET {} HTTP/1.0\r\n".format(self.path)
         request += "Host: {}\r\n".format(self.host)
-        request += "Connection: close\r\n"
+        request += "Connection: keep-alive\r\n"
         request += "User-Agent: browser-python\r\n"
         request += "\r\n"
 
         s.send(request.encode("utf8"))
 
-        response = s.makefile("r", encoding="utf8", newline="\r\n")
+        # rb option to read bytes, and not convert to text immediately
+        response = s.makefile("rb")
         statusline = response.readline()
+        statusline = statusline.decode("utf8").strip()
         version, status, explanation = statusline.split(" ", 2)
+
+        
+            
 
         # Not checking HTTP version because there are a lot of misconfigured servers that respond in HTTP 1.1 even if we asked for HTTP 1.0
 
         response_headers = {}
         while True:
             line = response.readline()
+            line = line.decode("utf8")
             if line == "\r\n":
                 break
             header, value = line.split(":", 1)
             response_headers[header.casefold()] = value.strip()
 
+        if status.startswith("3"):
+            # Handle redirects
+            if self.redirections_count >= MAX_REDIRECTIONS:
+                raise ValueError("Too many redirections")
+            new_url = response_headers.get("location")
+            if new_url:
+                # if new_url has :// at somewhere, create a new URL object with it and call request on it
+                if "://" in new_url:
+                    self.__init__(new_url, self.redirections_count + 1)
+                    return self.request()
+                elif new_url.startswith("/"):
+                    self.path = new_url
+                    self.redirections_count += 1
+                    return self.request()
+                else:
+                    raise ValueError("Location header value is not a valid URL")
+            else:
+                raise ValueError("Redirect without location header")
+
         assert "transfer-encoding" not in response_headers
         assert "content-encoding" not in response_headers
 
-        content = response.read()
-        s.close()
+        content = response.read(int(response_headers.get("content-length", None)))
+        content = content.decode("utf8")
+        # s.close() # Not closing the socket because we are using keep-alive
         return content
 
 def show(body: str, source: bool = False):
