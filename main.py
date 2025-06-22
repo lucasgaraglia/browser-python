@@ -101,4 +101,7 @@ def load(url: URL):
 
 if __name__ == "__main__":
     import sys
-    load(URL(sys.argv[1]))
+    if len(sys.argv) == 1:
+        load(URL(DEFAULT_FILE_URL))
+    else:
+        load(URL(sys.argv[1]))
