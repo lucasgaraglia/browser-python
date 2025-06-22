@@ -4,8 +4,11 @@ import ssl
 DEFAULT_FILE_URL = "file:///home/lucas/Documents/bs/asd.html"
 MAX_REDIRECTIONS = 10
 
+requests_cache = {}
+
 class URL:
     def __init__(self, url: str, count: int = 0):
+        self.full_url = url
         self.scheme, url = url.split(":", 1)
         assert self.scheme in ["http", "https", "file", "data", "source"]
 
@@ -44,6 +47,9 @@ class URL:
 
     def request(self):
 
+        if self.full_url in requests_cache:
+            return requests_cache[self.full_url]
+
         if self.scheme == "file":
             with open(self.path, "r", encoding="utf8") as f:
                 return f.read()
@@ -81,9 +87,6 @@ class URL:
         statusline = statusline.decode("utf8").strip()
         version, status, explanation = statusline.split(" ", 2)
 
-        
-            
-
         # Not checking HTTP version because there are a lot of misconfigured servers that respond in HTTP 1.1 even if we asked for HTTP 1.0
 
         response_headers = {}
@@ -120,6 +123,9 @@ class URL:
         content = response.read(int(response_headers.get("content-length", None)))
         content = content.decode("utf8")
         # s.close() # Not closing the socket because we are using keep-alive
+
+        requests_cache[self.full_url] = content
+
         return content
 
 def show(body: str, source: bool = False):
