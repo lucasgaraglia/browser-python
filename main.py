@@ -6,7 +6,14 @@ DEFAULT_FILE_URL = "file:///home/lucas/Documents/bs/asd.html"
 class URL:
     def __init__(self, url: str):
         self.scheme, url = url.split(":", 1)
-        assert self.scheme in ["http", "https", "file", "data"]
+        assert self.scheme in ["http", "https", "file", "data", "source"]
+
+        self.source = False
+
+        # If scheme is source, we turn true the source flag and do other logic with the original scheme
+        if self.scheme == "source":
+            self.scheme, url = url.split(":", 1)
+            self.source = True
 
         if self.scheme == "http":
             self.port = 80
@@ -15,6 +22,7 @@ class URL:
         elif self.scheme == "data":
             self.data_url = url
             return
+
 
         if url.startswith("//"):
             url = url[2:]
@@ -85,19 +93,44 @@ class URL:
         s.close()
         return content
 
-def show(body: str):
+def show(body: str, source: bool = False):
+
+    if source:
+        print(body)
+        return
+
     in_tag = False
-    for char in body:
+    buffer = ""
+    i = 0
+
+    while i < len(body):
+        char = body[i]
         if char == "<":
             in_tag = True
+            i += 1
+            continue
         elif char == ">":
             in_tag = False
-        elif not in_tag:
-            print(char, end="")
+            i += 1
+            continue
+
+        if not in_tag:
+            if body[i:i+4] == "&lt;":
+                buffer += "<"
+                i += 4
+                continue
+            elif body[i:i+4] == "&gt;":
+                buffer += ">"
+                i += 4
+                continue
+            else:
+                buffer += char
+        i += 1
+    print(buffer)
 
 def load(url: URL):
     body = url.request()
-    show(body)
+    show(body, url.source)
 
 if __name__ == "__main__":
     import sys
