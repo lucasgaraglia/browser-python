@@ -5,6 +5,10 @@ import tkinter
 
 DEFAULT_FILE_URL = "file:///home/lucas/Documents/bs/asd.html"
 MAX_REDIRECTIONS = 10
+WIDTH, HEIGHT = 800, 600
+HSTEP, VSTEP = 13, 18
+SCROLL_STEP = 100
+
 
 requests_cache = {}
 
@@ -154,11 +158,10 @@ class URL:
 
         return content
 
-def show(body: str, source: bool = False):
+def lex(body: str, source: bool = False):
 
     if source:
-        print(body)
-        return
+        return body
 
     in_tag = False
     buffer = ""
@@ -187,17 +190,56 @@ def show(body: str, source: bool = False):
             else:
                 buffer += char
         i += 1
-    print(buffer)
+    return buffer
 
-def load(url: URL):
-    body = url.request()
-    show(body, url.source)
+# Since layout doesn’t need to access anything in Browser, it can be a standalone function
+def layout(text: str):
+    display_list = []
+    cursor_x, cursor_y = HSTEP, VSTEP
+    for char in text:
+        display_list.append((cursor_x, cursor_y, char))
+        cursor_x += HSTEP
+        if cursor_x >= WIDTH - HSTEP:
+            cursor_y += VSTEP
+            cursor_x = HSTEP
+    return display_list
+
+
+
+class Browser:
+    def __init__(self):
+        self.window = tkinter.Tk()
+        self.canvas = tkinter.Canvas(
+            self.window,
+            width=WIDTH,
+            height=HEIGHT
+        )
+        self.canvas.pack()
+        self.display_list = []
+        self.scroll = 0
+        self.window.bind("<Down>", self.scroll_down)
+
+    def draw(self):
+        for x, y, char in self.display_list:
+            self.canvas.create_text(x, y - self.scroll, text=char)
+
+    def load(self, url: URL):
+        body = url.request()
+        text = lex(body, url.source)
+        self.display_list = layout(text)
+        self.draw()
+
+    def scroll_down(self, event):
+        self.scroll += SCROLL_STEP
+        self.canvas.delete("all")
+        self.draw()
+
 
 if __name__ == "__main__":
     import sys
     if len(sys.argv) == 1:
-        load(URL(DEFAULT_FILE_URL))
+        url = URL(DEFAULT_FILE_URL)
     else:
-        load(URL(sys.argv[1]))
-    window = tkinter.Tk() 
+        url = URL(sys.argv[1])
+    Browser().load(url)
     tkinter.mainloop()
