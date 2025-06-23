@@ -142,10 +142,10 @@ class URL:
                 content += chunk
                 response.readline()
         else:
-            content = response.read(int(response_headers.get("content-length", None)))
+            content = response.read(int(response_headers.get("content-length", -1)))
             if response_headers.get("content-encoding", "").lower() == "gzip":
                 content = gzip.decompress(content)
-            content = content.decode("utf8")
+        content = content.decode("utf8")
 
         # s.close() # Not closing the socket because we are using keep-alive
 
