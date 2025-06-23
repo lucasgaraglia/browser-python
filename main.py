@@ -1,6 +1,7 @@
 import socket
 import ssl
 import gzip
+import tkinter
 
 DEFAULT_FILE_URL = "file:///home/lucas/Documents/bs/asd.html"
 MAX_REDIRECTIONS = 10
@@ -198,3 +199,5 @@ if __name__ == "__main__":
         load(URL(DEFAULT_FILE_URL))
     else:
         load(URL(sys.argv[1]))
+    window = tkinter.Tk() 
+    tkinter.mainloop()
