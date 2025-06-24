@@ -218,6 +218,7 @@ class Browser:
         # Mouse scroll variables
         self.scrollbar_dragging = False
         self.scrollbar_start_y = 0
+        self.scrollbar_start_scroll = 0
 
         # Mouse scroll binds
         self.canvas.bind("<Button-1>", self.on_mouse_down)
@@ -303,16 +304,24 @@ class Browser:
             if x1 <= event.x <= x2 and y1 <= event.y <= y2:
                 self.scrollbar_dragging = True
                 self.scrollbar_start_y = event.y
+                self.scrollbar_start_scroll = self.scroll  # Remember the initial scroll position
     
     def on_mouse_drag(self, event):
         if self.scrollbar_dragging:
             delta_y = event.y - self.scrollbar_start_y
-
-            self.scroll = (delta_y/self.height)*self.v_end
-            if self.scroll < 0:
+            
+            # Calculate the new scroll position based on the delta
+            # The scrollbar moves in proportion to the visible area
+            max_scroll = max(0, self.v_end - self.height)
+            if max_scroll > 0:
+                # Calculate scroll change based on the proportion of movement
+                scroll_change = delta_y * max_scroll / (self.height - (self.height * self.height / self.v_end))
+                self.scroll = self.scrollbar_start_scroll + scroll_change
+                
+                # Clamp the scroll position to valid bounds
+                self.scroll = max(0, min(self.scroll, max_scroll))
+            else:
                 self.scroll = 0
-            elif self.scroll > self.v_end - self.height:
-                self.scroll = self.v_end - self.height
 
             self.canvas.delete("all")
             self.draw()
