@@ -10,7 +10,7 @@ HSTEP, VSTEP = 13, 18
 SCROLL_STEP = 100
 
 
-requests_cache = {}
+requests_cache: dict[str, str] = {}
 
 class URL:
     def __init__(self, url: str, count: int = 0):
@@ -45,7 +45,7 @@ class URL:
             self.host, port = self.host.split(":", 1)
             self.port = int(port)
 
-        self.path = "/" + url
+        self.path: str = "/" + url
 
         # If the scheme is file, host will be empty and path will be the full file path
 
@@ -92,7 +92,7 @@ class URL:
         response = s.makefile("rb")
         statusline = response.readline()
         statusline = statusline.decode("utf8").strip()
-        version, status, explanation = statusline.split(" ", 2)
+        _, status, _ = statusline.split(" ", 2) # version, status, explanation
 
         # Not checking HTTP version because there are a lot of misconfigured servers that respond in HTTP 1.1 even if we asked for HTTP 1.0
 
@@ -192,47 +192,83 @@ def lex(body: str, source: bool = False):
         i += 1
     return buffer
 
-# Since layout doesn’t need to access anything in Browser, it can be a standalone function
-def layout(text: str):
-    display_list = []
-    cursor_x, cursor_y = HSTEP, VSTEP
-    for char in text:
-        display_list.append((cursor_x, cursor_y, char))
-        cursor_x += HSTEP
-        if cursor_x >= WIDTH - HSTEP:
-            cursor_y += VSTEP
-            cursor_x = HSTEP
-    return display_list
-
-
-
 class Browser:
     def __init__(self):
+        self.width = WIDTH
+        self.height = HEIGHT
         self.window = tkinter.Tk()
         self.canvas = tkinter.Canvas(
             self.window,
-            width=WIDTH,
-            height=HEIGHT
+            width=self.width,
+            height=self.height
         )
-        self.canvas.pack()
-        self.display_list = []
-        self.scroll = 0
+        self.canvas.pack(fill=tkinter.BOTH, expand=True)
+        self.display_list: list[tuple[int, int, str]] = []
+        self.scroll = 0 # vertical scroll pixel cursor position
+
+        # Scroll binds (only working on Linux)
+        # TODO: add support for Windows and MacOS
         self.window.bind("<Down>", self.scroll_down)
+        self.window.bind("<Button-5>", self.scroll_down)
+        self.window.bind("<Up>", self.scroll_up)
+        self.window.bind("<Button-4>", self.scroll_up)
+
+        # Resize bind
+        self.window.bind("<Configure>", self.resize)
+
+        self.text = ""
+
 
     def draw(self):
         for x, y, char in self.display_list:
+            # Skip drawing characters that are not in the visible area
+            if y > self.scroll + self.height or y + VSTEP < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=char)
 
     def load(self, url: URL):
-        body = url.request()
-        text = lex(body, url.source)
-        self.display_list = layout(text)
+        body: str = url.request()
+        self.text = lex(body, url.source)
+        self.display_list = self.layout()
         self.draw()
 
     def scroll_down(self, event):
         self.scroll += SCROLL_STEP
         self.canvas.delete("all")
         self.draw()
+    
+    def scroll_up(self, event):
+        if self.scroll < SCROLL_STEP:
+            self.scroll = 0
+        else:
+            self.scroll -= SCROLL_STEP
+        self.canvas.delete("all")
+        self.draw()
+    
+    def resize(self, event):
+        if event.width == self.width and event.height == self.height:
+            return
+        self.width, self.height = event.width, event.height
+        # self.canvas.config(width=self.width, height=self.height) # discarted because it affects config and triggers resize again
+        self.window.geometry(f"{self.width}x{self.height}")
+        self.display_list = self.layout()
+        self.canvas.delete("all")
+        self.draw()
+    
+    # Since layout needs to access self.width and self.height, we define it as a method
+    def layout(self):
+        display_list = []
+        cursor_x, cursor_y = HSTEP, VSTEP
+        for char in self.text:
+            display_list.append((cursor_x, cursor_y, char))
+            cursor_x += HSTEP
+
+            if char == "\n":
+                cursor_y += 2*VSTEP
+                cursor_x = HSTEP
+            elif cursor_x >= self.width - HSTEP:
+                cursor_y += VSTEP
+                cursor_x = HSTEP
+        return display_list
 
 
 if __name__ == "__main__":
