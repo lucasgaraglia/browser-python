@@ -8,6 +8,7 @@ MAX_REDIRECTIONS = 10
 WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 SCROLL_STEP = 100
+SCROLLBAR_WIDTH = 20
 
 
 requests_cache: dict[str, str] = {}
@@ -196,6 +197,7 @@ class Browser:
     def __init__(self):
         self.width = WIDTH
         self.height = HEIGHT
+        self.v_end = 0  # Initial cursor Y position, and i want to acces it in the scroll_down method
         self.window = tkinter.Tk()
         self.canvas = tkinter.Canvas(
             self.window,
@@ -213,6 +215,15 @@ class Browser:
         self.window.bind("<Up>", self.scroll_up)
         self.window.bind("<Button-4>", self.scroll_up)
 
+        # Mouse scroll variables
+        self.scrollbar_dragging = False
+        self.scrollbar_start_y = 0
+
+        # Mouse scroll binds
+        self.canvas.bind("<Button-1>", self.on_mouse_down)
+        self.canvas.bind("<B1-Motion>", self.on_mouse_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_mouse_up)
+
         # Resize bind
         self.window.bind("<Configure>", self.resize)
 
@@ -224,6 +235,16 @@ class Browser:
             # Skip drawing characters that are not in the visible area
             if y > self.scroll + self.height or y + VSTEP < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=char)
+        
+        # Draw the vertical scroll bar
+        if self.v_end > self.height:
+            scroll_bar_height = self.height * self.height / self.v_end # fraction of the visible area: height / v_end, we multiply it by the height to get the scroll bar height
+            scroll_bar_y = self.scroll * self.height / self.v_end # If scroll step is 100, the bar has to go down 100 / v_end. Then, we multiply it by the height to get the scroll bar Y position.
+            self.canvas.create_rectangle(
+                self.width - SCROLLBAR_WIDTH, scroll_bar_y,
+                self.width, scroll_bar_y + scroll_bar_height,
+                fill="blue", tags="scrollbar"
+            )
 
     def load(self, url: URL):
         body: str = url.request()
@@ -232,7 +253,10 @@ class Browser:
         self.draw()
 
     def scroll_down(self, event):
-        self.scroll += SCROLL_STEP
+        # Suponemos que self.v_end = 2000 y self.height = 800. self.scroll arranca en 0. Entonces 1200 es el scroll máximo para ver como mínimo la última línea.
+        max_scroll = max(0, self.v_end - self.height)
+        self.scroll = min(self.scroll + SCROLL_STEP, max_scroll)
+
         self.canvas.delete("all")
         self.draw()
     
@@ -265,10 +289,36 @@ class Browser:
             if char == "\n":
                 cursor_y += 2*VSTEP
                 cursor_x = HSTEP
-            elif cursor_x >= self.width - HSTEP:
+            elif cursor_x >= self.width - SCROLLBAR_WIDTH - HSTEP:
                 cursor_y += VSTEP
                 cursor_x = HSTEP
+        self.v_end = cursor_y
         return display_list
+    
+    def on_mouse_down(self, event):
+        # Detect if user clicked on the scrollbar
+        items = self.canvas.find_withtag("scrollbar")
+        if items:
+            x1, y1, x2, y2 = self.canvas.coords(items[0])
+            if x1 <= event.x <= x2 and y1 <= event.y <= y2:
+                self.scrollbar_dragging = True
+                self.scrollbar_start_y = event.y
+    
+    def on_mouse_drag(self, event):
+        if self.scrollbar_dragging:
+            delta_y = event.y - self.scrollbar_start_y
+
+            self.scroll = (delta_y/self.height)*self.v_end
+            if self.scroll < 0:
+                self.scroll = 0
+            elif self.scroll > self.v_end - self.height:
+                self.scroll = self.v_end - self.height
+
+            self.canvas.delete("all")
+            self.draw()
+    
+    def on_mouse_up(self, event):
+        self.scrollbar_dragging = False
 
 
 if __name__ == "__main__":
