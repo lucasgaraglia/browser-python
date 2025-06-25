@@ -54,6 +54,9 @@ class URL:
 
     def request(self):
 
+        if self.full_url == "about:blank":
+            return ""
+
         if self.full_url in requests_cache:
             return requests_cache[self.full_url]
 
@@ -66,7 +69,9 @@ class URL:
             elif self.data_url.startswith("text/plain,"):
                 content = self.data_url[11:]
             else:
-                raise ValueError("Unsupported data URL scheme")
+                # raise ValueError("Unsupported data URL scheme")
+                self.full_url = "about:blank"
+                return self.request()
             return content + "\n"
 
         s = socket.socket(
@@ -74,7 +79,11 @@ class URL:
             type=socket.SOCK_STREAM,
             proto=socket.IPPROTO_TCP
         )
-        s.connect((self.host, self.port))
+        try:
+            s.connect((self.host, self.port))
+        except:
+            self.full_url = "about:blank"
+            return self.request()
 
         if self.scheme == "https":
             ctx = ssl.create_default_context()
@@ -87,7 +96,11 @@ class URL:
         request += "Accept-Encoding: gzip\r\n"
         request += "\r\n"
 
-        s.send(request.encode("utf8"))
+        try:
+            s.send(request.encode("utf8"))
+        except:
+            self.full_url = "about:blank"
+            return self.request()
 
         # rb option to read bytes, and not convert to text immediately
         response = s.makefile("rb")
@@ -111,7 +124,9 @@ class URL:
         if status.startswith("3"):
             # Handle redirects
             if self.redirections_count >= MAX_REDIRECTIONS:
-                raise ValueError("Too many redirections")
+                self.full_url = "about:blank"
+                return self.request()
+                #raise ValueError("Too many redirections")
             new_url = response_headers.get("location")
             if new_url:
                 # if new_url has :// at somewhere, create a new URL object with it and call request on it
@@ -123,16 +138,18 @@ class URL:
                     self.redirections_count += 1
                     return self.request()
                 else:
-                    raise ValueError("Location header value is not a valid URL")
+                    self.full_url = "about:blank"
+                    return self.request()
+                    # raise ValueError("Location header value is not a valid URL")
             else:
-                raise ValueError("Redirect without location header")
+                self.full_url = "about:blank"
+                return self.request()
 
         # assert "transfer-encoding" not in response_headers
         # assert "content-encoding" not in response_headers
 
         # Handle possible content-encoding and transfer-encoding
 
-        
         if response_headers.get("transfer-encoding", "").lower() == "chunked":
             # Handle chunked transfer encoding
             content = b""
